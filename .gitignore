@@ -1,0 +1,39 @@
+# ===========================
+# C++ Build Artifacts
+# ===========================
+build/
+bin/
+lib/
+*.o
+*.obj
+*.d
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+
+# ===========================
+# Executables
+# ===========================
+# Main simulator
+cpu-sim
+cpu-sim.exe
+
+# Test binaries
+unit_tests
+unit_tests.exe
+test_main
+test_main.exe
+
+# ===========================
+# Python (Visualization Tools)
+# ===========================
+__pycache__/
+*.pyc
+*.pyo
+
+# ===========================
+# IDEs & Editors
+# ===========================
+.vscode/
