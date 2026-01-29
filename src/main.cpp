@@ -15,7 +15,24 @@ int main(int argc, char* argv[])
     // Default 32KB, or use command line arg
     uint32_t l1_size = 32 * 1024;
     if (argc > 1) {
-        l1_size = std::atoi(argv[1]);
+        int parsed_size = std::atoi(argv[1]);
+        if (parsed_size <= 0) {
+            std::cerr << "Error: Cache size must be positive. Got: " << argv[1] << "\n";
+            return 1;
+        }
+        l1_size = static_cast<uint32_t>(parsed_size);
+        
+        // Validate that cache size is power of 2
+        if ((l1_size & (l1_size - 1)) != 0) {
+            std::cerr << "Error: Cache size must be a power of 2. Got: " << l1_size << "\n";
+            return 1;
+        }
+        
+        // Validate reasonable cache size (at least 128 bytes, at most 1GB)
+        if (l1_size < 128 || l1_size > 1024 * 1024 * 1024) {
+            std::cerr << "Error: Cache size out of reasonable range [128B, 1GB]. Got: " << l1_size << "\n";
+            return 1;
+        }
     }
 
     arch::PipelineConfig pipe_cfg{5, 1};

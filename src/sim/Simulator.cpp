@@ -21,6 +21,7 @@ SimStats Simulator::run(const workload::Workload& workload) {
             uint32_t penalty = predictor_.predict();
             if (penalty > 0) {
                 ++stats.branch_mispredicts;
+                pipeline_.flush();  // Full pipeline flush on misprediction
                 latency += penalty;
             }
         }

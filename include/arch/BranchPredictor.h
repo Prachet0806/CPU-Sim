@@ -12,6 +12,13 @@ struct BranchPredictorConfig {
 class BranchPredictor {
 public:
     explicit BranchPredictor(const BranchPredictorConfig& cfg);
+    
+    // Prevent copying and moving (RNG state should not be duplicated)
+    BranchPredictor(const BranchPredictor&) = delete;
+    BranchPredictor& operator=(const BranchPredictor&) = delete;
+    BranchPredictor(BranchPredictor&&) = delete;
+    BranchPredictor& operator=(BranchPredictor&&) = delete;
+    
     uint32_t predict();
 
 private:
