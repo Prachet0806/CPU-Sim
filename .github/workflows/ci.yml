@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        build_type: [Release, Debug]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DBUILD_TESTS=ON
+      
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+      
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -C ${{ matrix.build_type }}
+        working-directory: ${{ github.workspace }}
+
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: |
+          find . -name "*.cpp" -o -name "*.h" -o -name "*.hpp" | grep -v build | xargs clang-format --dry-run --Werror
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run cppcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y cppcheck
+          cppcheck --enable=all --std=c++17 --suppress=missingIncludeSystem -I include src/
+        continue-on-error: true

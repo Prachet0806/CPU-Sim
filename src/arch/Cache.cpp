@@ -1,3 +1,4 @@
+//src/arch/Cache.cpp
 #include "arch/Cache.h"
 #include <cassert>
 #include <cstdint>
@@ -22,10 +23,13 @@ Cache::Cache(const CacheConfig& cfg) : config_(cfg) {
     assert((cfg.line_size & (cfg.line_size - 1)) == 0 && "Line size must be power of 2");
     assert((cfg.associativity & (cfg.associativity - 1)) == 0 && "Associativity must be power of 2");
     assert(cfg.size_bytes >= cfg.line_size * cfg.associativity && "Cache size must be >= line_size * associativity");
+    assert(cfg.hit_latency > 0 && "Hit latency must be positive");
+    assert(cfg.miss_latency > cfg.hit_latency && "Miss latency must be greater than hit latency");
     
     uint32_t num_lines = cfg.size_bytes / cfg.line_size;
     uint32_t num_sets = num_lines / cfg.associativity;
     assert((num_sets & (num_sets - 1)) == 0 && "Number of sets must be power of 2");
+    (void)num_sets; // Used in assert, suppressed in release builds
     
     tags_.resize(num_lines, 0);
     valid_bits_.resize(num_lines, false);
@@ -37,11 +41,11 @@ uint32_t Cache::access(uint64_t address) {
     uint32_t num_sets = (config_.size_bytes / config_.line_size) / config_.associativity;
     uint32_t index_bits = log2_exact(num_sets);
 
-    uint64_t index_mask = (1ULL << index_bits) - 1;
+    uint64_t index_mask = (index_bits >= 64) ? ~0ULL : ((1ULL << index_bits) - 1);
     uint64_t set_index  = (address >> offset_bits) & index_mask;
     uint64_t tag        = address >> (offset_bits + index_bits);
 
-    uint32_t start = set_index * config_.associativity;
+    uint32_t start = static_cast<uint32_t>(set_index * config_.associativity);
     uint32_t end   = start + config_.associativity;
 
     // Check for hit and update LRU on hit

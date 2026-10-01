@@ -37,3 +37,8 @@ __pycache__/
 # IDEs & Editors
 # ===========================
 .vscode/
+
+# ===========================
+# Validation Output
+# ===========================
+sensitivity_curve.png

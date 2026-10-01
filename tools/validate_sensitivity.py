@@ -2,9 +2,13 @@ import subprocess
 import matplotlib.pyplot as plt
 import os
 import re
+import sys
 
 # CONFIG
-SIM_EXE = "./cpu-sim"
+if sys.platform == "win32":
+    SIM_EXE = "./build/Release/cpu-sim.exe"
+else:
+    SIM_EXE = "./cpu-sim"
 OUTPUT_IMG = "sensitivity_curve.png"
 
 # Sweep Cache Size: 1KB to 1MB (powers of 2)
