@@ -10,6 +10,7 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         build_type: [Release, Debug]
@@ -32,9 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
       - name: Check formatting
         run: |
-          find . -name "*.cpp" -o -name "*.h" -o -name "*.hpp" | grep -v build | xargs clang-format --dry-run --Werror
+          git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format --dry-run --Werror
 
   static-analysis:
     runs-on: ubuntu-latest

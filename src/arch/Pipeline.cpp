@@ -80,8 +80,10 @@ uint32_t Pipeline::cycle() {
     
     // Process stages in reverse order (WRITEBACK -> FETCH)
     for (int stage_idx = static_cast<int>(config_.stages) - 1; stage_idx >= 0; --stage_idx) {
+        const auto stage = static_cast<size_t>(stage_idx);  // Explicit conversion for indexing
+        
         for (size_t slot = 0; slot < config_.issue_width; ++slot) {
-            auto& instr = stages_[stage_idx][slot];
+            auto& instr = stages_[stage][slot];
             if (!instr.valid) continue;
             
             // Increment cycles in current stage
@@ -101,14 +103,14 @@ uint32_t Pipeline::cycle() {
                             // Add misprediction penalty cycles
                             return instr.memory_latency;
                         }
-                        advance_instruction(stage_idx, slot);
+                        advance_instruction(stage, slot);
                     }
                     break;
                 }
                 case PipelineStage::DECODE: {
                     // Decode takes 1 cycle
                     if (instr.cycles_in_stage >= 1) {
-                        advance_instruction(stage_idx, slot);
+                        advance_instruction(stage, slot);
                     }
                     break;
                 }
@@ -117,7 +119,7 @@ uint32_t Pipeline::cycle() {
                     // Memory ops will need MEM stage
                     uint32_t execute_cycles = 1 + instr.instr.latency;
                     if (instr.cycles_in_stage >= execute_cycles) {
-                        advance_instruction(stage_idx, slot);
+                        advance_instruction(stage, slot);
                     }
                     break;
                 }
@@ -143,7 +145,7 @@ uint32_t Pipeline::cycle() {
                             // Still waiting for memory
                         } else {
                             // Memory access complete
-                            advance_instruction(stage_idx, slot);
+                            advance_instruction(stage, slot);
                             
                             // Remove from pending addresses
                             if (instr.instr.type == InstrType::LOAD) {
@@ -166,7 +168,7 @@ uint32_t Pipeline::cycle() {
                     } else {
                         // Non-memory instruction passes through MEM in 1 cycle
                         if (instr.cycles_in_stage >= 1) {
-                            advance_instruction(stage_idx, slot);
+                            advance_instruction(stage, slot);
                         }
                     }
                     break;

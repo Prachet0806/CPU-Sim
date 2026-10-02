@@ -361,7 +361,9 @@ int main(int argc, char* argv[]) {
     auto stats = simulator.run(workload);
     
     // Report results
-    double ipc = stats.cycles > 0 ? static_cast<double>(stats.instructions) / stats.cycles : 0.0;
+    double ipc = stats.cycles > 0
+        ? static_cast<double>(stats.instructions) / static_cast<double>(stats.cycles)
+        : 0.0;
     
     if (config.json_output) {
         print_json_output(config, stats, ipc);

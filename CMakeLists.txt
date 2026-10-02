@@ -9,12 +9,31 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_TESTS "Build unit tests" ON)
 option(BUILD_BENCHMARKS "Build benchmarks" OFF)
 
-# Compiler warnings
-if(MSVC)
-    add_compile_options(/W4 /WX /permissive-)
-else()
-    add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wshadow -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused -Woverloaded-virtual -Wconversion -Wsign-conversion -Wnull-dereference -Wdouble-promotion)
-endif()
+# Interface target for strict warnings (applied only to project targets, not dependencies)
+add_library(project_warnings INTERFACE)
+target_compile_options(project_warnings INTERFACE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Werror
+        -Wshadow
+        -Wnon-virtual-dtor
+        -Wold-style-cast
+        -Wcast-align
+        -Wunused
+        -Woverloaded-virtual
+        -Wconversion
+        -Wsign-conversion
+        -Wnull-dereference
+        -Wdouble-promotion
+    >
+    $<$<CXX_COMPILER_ID:MSVC>:
+        /W4
+        /WX
+        /permissive-
+    >
+)
 
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -33,6 +52,7 @@ set(SIM_SOURCES
 # Main executable
 add_executable(cpu-sim ${SIM_SOURCES})
 target_compile_features(cpu-sim PRIVATE cxx_std_17)
+target_link_libraries(cpu-sim PRIVATE project_warnings)
 set_target_properties(cpu-sim PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
@@ -41,16 +61,16 @@ set_target_properties(cpu-sim PROPERTIES
 if(BUILD_TESTS)
     enable_testing()
     
-    # Fetch Catch2
+    # Fetch Catch2 (latest v3.7.1)
     include(FetchContent)
     FetchContent_Declare(
         Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG v3.5.3
+        GIT_TAG v3.7.1
     )
     FetchContent_MakeAvailable(Catch2)
     
-    # Test executable
+    # Test executable (no strict warnings - Catch2 compatibility)
     add_executable(unit_tests
         src/test_main.cpp
         src/arch/Pipeline.cpp
@@ -65,9 +85,9 @@ if(BUILD_TESTS)
     
     add_test(NAME unit_tests COMMAND unit_tests)
     
-    # Integration tests (run simulator and verify output)
+    # Integration tests (run simulator with new CLI flags)
     add_test(NAME integration_matmul_32kb
-        COMMAND cpu-sim 32768
+        COMMAND cpu-sim --cache-size 32768 --json
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
 endif()

@@ -1,0 +1,21 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+BreakBeforeBraces: Allman
+AllowShortIfStatementsOnSingleLine: false
+AllowShortLoopsOnSingleLine: false
+AllowShortFunctionsOnSingleLine: Inline
+ColumnLimit: 100
+PointerAlignment: Left
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SortIncludes: false
+IncludeCategories:
+  - Regex: '^<.*>'
+    Priority: 1
+  - Regex: '^".*'
+    Priority: 2
