@@ -146,8 +146,8 @@ bool load_config_file(const std::string& filename, SimConfig& config) {
     if (extract_value("json_output", val)) config.json_output = (val == "true");
     if (extract_value("show_progress", val)) config.show_progress = (val == "true");
     if (extract_value("progress_interval", val)) {
-        uint64_t interval;
-        if (parse_uint(val, *reinterpret_cast<uint32_t*>(&interval))) config.progress_interval = interval;
+        uint32_t parsed_interval;
+        if (parse_uint(val, parsed_interval)) config.progress_interval = parsed_interval;
     }
     
     return true;
@@ -279,10 +279,16 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--progress") {
             config.show_progress = true;
         } else if (arg == "--progress-interval") {
-            if (i + 1 >= argc || !parse_uint(argv[++i], *reinterpret_cast<uint32_t*>(&config.progress_interval))) {
+            if (i + 1 >= argc) {
                 std::cerr << "Error: --progress-interval requires a positive integer\n";
                 return 1;
             }
+            uint32_t parsed_interval;
+            if (!parse_uint(argv[++i], parsed_interval)) {
+                std::cerr << "Error: --progress-interval requires a positive integer\n";
+                return 1;
+            }
+            config.progress_interval = parsed_interval;
         } else if (arg[0] != '-') {
             // Legacy positional argument: cache size
             if (!parse_uint(arg, config.l1_size)) {

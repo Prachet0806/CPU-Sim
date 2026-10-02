@@ -5,7 +5,7 @@ UseTab: Never
 BreakBeforeBraces: Allman
 AllowShortIfStatementsOnSingleLine: false
 AllowShortLoopsOnSingleLine: false
-AllowShortFunctionsOnSingleLine: Inline
+AllowShortFunctionOnSingleLine: Inline
 ColumnLimit: 100
 PointerAlignment: Left
 AlignAfterOpenBracket: Align
