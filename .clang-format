@@ -5,8 +5,8 @@ UseTab: Never
 BreakBeforeBraces: Allman
 AllowShortIfStatementsOnSingleLine: false
 AllowShortLoopsOnSingleLine: false
-AllowShortFunctionOnSingleLine: Inline
-ColumnLimit: 100
+AllowShortFunctionOnASingleLine: Inline
+ColumnLimit: 120
 PointerAlignment: Left
 AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: false
@@ -14,8 +14,3 @@ AlignConsecutiveDeclarations: false
 SpaceBeforeParens: ControlStatements
 SpaceInEmptyParentheses: false
 SortIncludes: false
-IncludeCategories:
-  - Regex: '^<.*>'
-    Priority: 1
-  - Regex: '^".*'
-    Priority: 2
