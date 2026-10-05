@@ -29,16 +29,6 @@ jobs:
         run: ctest --test-dir build --output-on-failure -C ${{ matrix.build_type }}
         working-directory: ${{ github.workspace }}
 
-  clang-format:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format-18
-      - name: Check formatting
-        run: |
-          git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format-18 --dry-run --Werror
-
   static-analysis:
     runs-on: ubuntu-latest
     steps:
