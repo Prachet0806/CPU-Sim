@@ -2,6 +2,7 @@
 # C++ Build Artifacts
 # ===========================
 build/
+cmake-build-*/
 bin/
 lib/
 *.o
@@ -12,6 +13,10 @@ lib/
 *.so
 *.dll
 *.dylib
+CMakeUserPresets.json
+
+# Local copy of Catch2; tests no longer depend on it
+third_party/catch2/
 
 # ===========================
 # Executables
@@ -37,6 +42,9 @@ __pycache__/
 # IDEs & Editors
 # ===========================
 .vscode/
+.vs/
+*.suo
+*.user
 
 # ===========================
 # Validation Output

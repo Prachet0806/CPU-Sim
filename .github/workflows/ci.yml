@@ -14,17 +14,17 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         build_type: [Release, Debug]
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DBUILD_TESTS=ON
-      
+
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }} --parallel
-      
+
       - name: Test
         run: ctest --test-dir build --output-on-failure -C ${{ matrix.build_type }}
         working-directory: ${{ github.workspace }}
@@ -33,8 +33,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cppcheck clang-format
       - name: Run cppcheck
-        run: |
-          sudo apt-get update && sudo apt-get install -y cppcheck
-          cppcheck --enable=all --std=c++17 --suppress=missingIncludeSystem -I include src/
-        continue-on-error: true
+        run: cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c++17 --suppress=missingIncludeSystem -I include src/
+      - name: Run clang-format check
+        run: find include src -type f \( -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 clang-format --dry-run --Werror

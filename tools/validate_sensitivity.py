@@ -1,52 +1,57 @@
+"""Sweep L1 cache capacity and plot the simulator's reported misses."""
+
+import argparse
+import json
 import subprocess
-import matplotlib.pyplot as plt
-import os
-import re
 import sys
+from pathlib import Path
 
-# CONFIG
-if sys.platform == "win32":
-    SIM_EXE = "./build/Release/cpu-sim.exe"
-else:
-    SIM_EXE = "./cpu-sim"
-OUTPUT_IMG = "sensitivity_curve.png"
+ROOT = Path(__file__).resolve().parents[1]
 
-# Sweep Cache Size: 1KB to 1MB (powers of 2)
-cache_sizes = [1024 * (2**i) for i in range(0, 11)] 
-misses = []
-sizes_kb = []
 
-print(f"Running Sensitivity Sweep using {SIM_EXE}...")
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    default_exe = ROOT / "build" / ("Release/cpu-sim.exe" if sys.platform == "win32" else "cpu-sim")
+    parser.add_argument("--exe", type=Path, default=default_exe, help="simulator executable")
+    parser.add_argument("--output", type=Path, default=ROOT / "sensitivity_curve.png")
+    parser.add_argument("--no-plot", action="store_true", help="run the sweep without Matplotlib")
+    args = parser.parse_args()
 
-if not os.path.exists(SIM_EXE):
-    print(f"Error: Executable {SIM_EXE} not found. Did you compile?")
-    exit(1)
+    if not args.exe.is_file():
+        parser.error(f"executable not found: {args.exe}")
 
-for size in cache_sizes:
-    # Run simulator
-    result = subprocess.run([SIM_EXE, str(size)], capture_output=True, text=True)
-    
-    # Parse the human-readable output for "Cache Misses: <number>"
-    # We use Regex to be robust
-    match = re.search(r"Cache Misses:\s+(\d+)", result.stdout)
-    
-    if match:
-        miss_count = int(match.group(1))
-        misses.append(miss_count)
-        sizes_kb.append(size / 1024)
-        print(f"Size: {size/1024:6.0f} KB -> Misses: {miss_count}")
-    else:
-        print(f"Failed to parse output for size {size}. Got:\n{result.stdout}")
+    cache_sizes = [1024 * 2**step for step in range(11)]
+    misses = []
+    for size in cache_sizes:
+        result = subprocess.run(
+            [str(args.exe), "--cache-size", str(size), "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        data = json.loads(result.stdout)
+        if data["l1_cache_size"] != size or data["instructions_retired"] <= 0:
+            raise RuntimeError(f"invalid simulator result at cache size {size}")
+        misses.append(data["cache_misses"])
+        print(f"Size: {size // 1024:6d} KB -> Misses: {misses[-1]}")
 
-# Plotting
-plt.figure(figsize=(10, 6))
-plt.plot(sizes_kb, misses, marker='o', linestyle='-', color='b', linewidth=2)
-plt.xscale('log')
-plt.xlabel('L1 Cache Size (KB)')
-plt.ylabel('Total Cache Misses')
-plt.title('Validation: MatMul Working Set vs Cache Capacity')
-plt.grid(True, which="both", ls="-", alpha=0.5)
-plt.axvline(x=48, color='r', linestyle='--', label='Working Set (~48KB)')
-plt.legend()
-plt.savefig(OUTPUT_IMG)
-print(f"\nValidation Graph saved to {OUTPUT_IMG}")
+    if args.no_plot:
+        return
+
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(10, 6))
+    plt.plot([size / 1024 for size in cache_sizes], misses, marker="o")
+    plt.xscale("log")
+    plt.xlabel("L1 Cache Size (KB)")
+    plt.ylabel("Total Cache Misses")
+    plt.title("MatMul cache-size sensitivity")
+    plt.grid(True, which="both", alpha=0.5)
+    plt.axvline(x=48, color="r", linestyle="--", label="Working set (48 KB)")
+    plt.legend()
+    plt.savefig(args.output)
+    print(f"Saved plot to {args.output}")
+
+
+if __name__ == "__main__":
+    main()

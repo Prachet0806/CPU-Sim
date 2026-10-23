@@ -37,10 +37,10 @@ This tool simulates the **hardware cost of software**, focusing on latency, stal
 The simulator models a simplified CPU with the following assumptions:
 
 * **In-order execution** with 5-stage pipeline (Fetch, Decode, Execute, Memory, Writeback)
-* **Configurable superscalar issue width** (1-N instructions per cycle)
+* **Configurable issue width** (1-8 instructions per cycle)
 * **Blocking L1 cache** with set-associative organization and LRU replacement
-* **Full pipeline flush on branch misprediction** (penalty includes refetch cycles)
-* **RAW data hazard detection** on memory addresses (LOAD/STORE dependencies)
+* **Branch misprediction cost** added as recovery cycles to a fixed instruction stream
+* **Store-to-load address dependency** stalls
 * **Structural hazard** on single memory port
 
 The simulator is designed to study **performance trends and sensitivities**, not to produce cycle-accurate results.
@@ -56,8 +56,8 @@ The simulator is designed to study **performance trends and sensitivities**, not
   * **Structural hazards** (busy pipeline stages, single memory port)
   * **Control hazards** (branch mispredictions with configurable penalty)
   * **Data hazards** (RAW dependencies on memory addresses)
-* **Configurable pipeline depth** and **issue width** (superscalar support)
-* **True superscalar modeling**: multiple instructions per cycle through pipeline stages
+* **Fixed five-stage pipeline** and configurable issue width (1-8)
+* Multiple instructions can advance per cycle where stage and port capacity permits
 
 ### 2. Cache Hierarchy Modeling
 
@@ -75,13 +75,14 @@ The simulator is designed to study **performance trends and sensitivities**, not
 
 ### 3. Branch Prediction
 
-* Implements a **probabilistic branch predictor**
-* Models prediction accuracy (e.g., 95%)
+* Implements a **probabilistic branch predictor** with configurable accuracy
+* Models prediction accuracy (e.g., 95%) using a fixed-seed RNG for deterministic replay
 * Measures:
   * Misprediction frequency
-  * Pipeline flush penalties
-* Branch prediction at **Fetch stage** (realistic timing)
-* Uses a fixed RNG seed for deterministic replay
+  * Recovery-cycle penalties
+* Branch prediction occurs at **Fetch stage**. The synthetic workloads have no alternate branch path, so mispredictions preserve the generated instruction stream.
+* **Note:** The bundled MatMul and Conv1D workloads do not emit branch instructions;
+  use `--workload branch` to exercise prediction and recovery-cycle behavior.
 
 ### 4. AI-Representative Workloads
 
@@ -101,7 +102,7 @@ The simulator includes synthetic workloads that represent common AI memory behav
 
 * **Streaming Workload Interface**
   * On-demand instruction generation via `has_next()`/`next()`
-  * Enables simulation of arbitrarily large problem sizes
+  * Avoids materializing the entire stream; workload parameters and address ranges remain finite
   * Legacy `instructions()` method retained for backward compatibility
 
 ---
@@ -122,7 +123,7 @@ cpu-sim/
 │   └── workload/    # AI-style workload generators
 ├── tools/
 │   └── validate_sensitivity.py  # Cache-size sweep & visualization
-├── tests/           # Unit tests (Catch2)
+├── src/test_main.cpp  # Self-contained architecture regression tests
 ├── .github/workflows/  # CI configuration
 ├── CMakeLists.txt   # Build configuration
 └── README.md
@@ -161,7 +162,7 @@ ctest --test-dir build --output-on-failure -C Release
 ./build/Release/cpu-sim.exe --cache-size 32768 --issue-width 2 --progress
 
 # Load configuration from JSON file
-./build/Release/cpu-sim.exe --config my_config.json
+./build/Release/cpu-sim.exe --config tests/conv1d_config.json
 ```
 
 ### Configuration Options
@@ -173,69 +174,30 @@ ctest --test-dir build --output-on-failure -C Release
 | `--cache-assoc <ways>` | Associativity (power of 2) | 8 |
 | `--cache-hit-latency <cycles>` | Hit latency | 4 |
 | `--cache-miss-latency <cycles>` | Miss latency | 100 |
-| `--pipeline-stages <n>` | Pipeline stages | 5 |
-| `--issue-width <n>` | Superscalar issue width | 1 |
+| `--pipeline-stages <n>` | Pipeline stages (fixed at 5) | 5 |
+| `--issue-width <n>` | Issue width (1-8) | 1 |
 | `--bp-accuracy <0-1>` | Branch predictor accuracy | 0.95 |
 | `--bp-penalty <cycles>` | Misprediction penalty | 15 |
-| `--workload <matmul\|conv1d>` | Workload type | matmul |
-| `--matmul-n <n>` | Matrix dimension | 64 |
-| `--conv1d-len <n>` | Input length | 1000 |
-| `--conv1d-kernel <n>` | Kernel size | 3 |
+| `--workload <matmul\|conv1d\|branch>` | Workload type | matmul |
+| `--matmul-n <n>` | Matrix dimension (1-8192) | 64 |
+| `--conv1d-len <n>` | Input length (1-67108864) | 1000 |
+| `--conv1d-kernel <n>` | Kernel size (1 to input length) | 3 |
+| `--branch-count <n>` | Branches in branch workload | 1000 |
 | `--json` | JSON output | false |
 | `--progress` | Show progress | false |
 | `--progress-interval <n>` | Progress report interval | 1000000 |
 | `--config <file>` | Load JSON config file | - |
 
-### Sample Output (Human-Readable)
+### JSON configuration
 
-```text
-[SIMULATION COMPLETE]
-Workload:             Matrix Multiplication
-Matrix Size (N):      64
-L1 Cache Size:        32768 Bytes
-L1 Line Size:         64 Bytes
-L1 Associativity:     8-way
-Pipeline Stages:      5
-Issue Width:          1
-BP Accuracy:          0.95
-BP Mispredict Penalty:15 cycles
---------------------------------
-Instructions Retired: 794624
-Total Cycles:         2998276
-IPC:                  0.27
---------------------------------
-Cache Accesses:       532480
-Cache Hits:           531712
-Cache Misses:         768
-Branch Predictions:   0
-Branch Mispredicts:   0
---------------------------------
-```
+The config file is a flat JSON object. It accepts CLI-style names such as
+`cache_size` and `issue_width`, and result-style aliases such as
+`l1_cache_size` and `pipeline_issue_width`. Use `workload` or `workload_type`
+with `matmul`, `conv1d`, or `branch`. Invalid, duplicate, or unknown fields
+cause an error. See `tests/conv1d_config.json` for an example.
 
-### Sample Output (JSON)
-
-```json
-{
-  "workload": "matmul",
-  "l1_cache_size": 32768,
-  "l1_line_size": 64,
-  "l1_associativity": 8,
-  "l1_hit_latency": 4,
-  "l1_miss_latency": 100,
-  "pipeline_stages": 5,
-  "pipeline_issue_width": 1,
-  "bp_accuracy": 0.95,
-  "bp_mispredict_penalty": 15,
-  "instructions_retired": 794624,
-  "total_cycles": 2998276,
-  "ipc": 0.27,
-  "cache_misses": 768,
-  "cache_hits": 531712,
-  "cache_accesses": 532480,
-  "branch_mispredicts": 0,
-  "branch_predictions": 0
-}
-```
+The `--json` result also contains measured fields such as `total_cycles` and
+`cache_misses`; it is a result document, not a configuration file.
 
 ---
 
@@ -245,14 +207,16 @@ Validation is performed in two complementary layers:
 
 ### 1. Unit Verification (Contract Testing)
 
-A dedicated test runner (Catch2) validates architectural invariants:
+A self-contained test runner validates architectural invariants:
 
 * Re-accessing the same address produces a cache hit
 * Direct-mapped caches exhibit conflict misses
-* Branch misprediction penalties are honored
-* Pipeline correctly models RAW hazards and structural hazards
+* Branch misprediction penalties preserve instruction counts
+* Accepted instructions retire in order, even with a memory miss
+* Store-to-load hazards and the single memory port are enforced
+* Invalid configuration values fail in Release builds
 
-Run with: `ctest --test-dir build -C Release`
+Run with: `cmake -B build -DBUILD_TESTS=ON && cmake --build build --config Release && ctest --test-dir build --output-on-failure -C Release`
 
 ### 2. Behavioral Validation (Sensitivity Analysis)
 
@@ -260,19 +224,20 @@ The simulator is validated by sweeping L1 cache sizes and observing miss-rate tr
 
 For a **64×64 Matrix Multiplication** (~49KB working set):
 
-* Severe thrashing occurs when cache < working set
-* Miss rate drops sharply once cache capacity exceeds the working set
-* The resulting **"cache cliff"** confirms correct architectural behavior
+* The sweep records the miss count for each cache size
+* Trends can reveal capacity and mapping effects, but do not by themselves
+  establish cycle accuracy or agreement with a physical CPU
 
 Validation is automated using:
 
 ```bash
-python3 tools/validate_sensitivity.py
+python3 tools/validate_sensitivity.py --exe build/Release/cpu-sim.exe
 ```
 
-![Sensitivity Curve](sensitivity_curve.png)
-
-The output is a plot of cache misses vs cache size, demonstrating expected physical behavior.
+On Linux or macOS, use `--exe build/cpu-sim`. Plotting requires Matplotlib
+and writes `sensitivity_curve.png` by default; use `--output` to choose a path.
+Use `--no-plot` to run the numeric sweep without Matplotlib.
+Install the plotting dependency with `python3 -m pip install -r tools/requirements.txt`.
 
 *Validation focuses on qualitative correctness (trends and cliffs) rather than absolute cycle accuracy.*
 
@@ -301,7 +266,7 @@ This project mirrors the **pre-silicon workflow**, where software models are use
 * [ ] Add multi-level cache hierarchy (L2 / L3)
 * [x] Support superscalar execution (issue width > 1) - **Implemented**
 * [ ] Implement out-of-order execution (scoreboarding / Tomasulo)
-* [ ] Add CPI breakdown reporting (stall cycle categorization)
+* [x] Add a branch-emitting workload to exercise branch prediction
 * [ ] Add I-cache modeling separate from D-cache
 * [ ] Support for trace-based workloads (external trace files)
 
@@ -316,6 +281,6 @@ This project demonstrates:
 * Pre-silicon performance modeling
 * AI workload–driven architectural analysis
 * Streaming workload simulation for scalability
-* Comprehensive testing infrastructure (Catch2, CI/CD)
+* Self-contained regression tests and CI builds
 
 It is intended as a **performance exploration and validation tool**, not a functional CPU emulator.

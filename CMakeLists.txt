@@ -6,8 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Build options
-option(BUILD_TESTS "Build unit tests" ON)
-option(BUILD_BENCHMARKS "Build benchmarks" OFF)
+option(BUILD_TESTS "Build unit tests" OFF)
 
 # Interface target for strict warnings (applied only to project targets, not dependencies)
 add_library(project_warnings INTERFACE)
@@ -47,6 +46,7 @@ set(SIM_SOURCES
     src/sim/Simulator.cpp
     src/workload/MatMulWorkload.cpp
     src/workload/Conv1DWorkload.cpp
+    src/workload/BranchWorkload.cpp
 )
 
 # Main executable
@@ -60,17 +60,6 @@ set_target_properties(cpu-sim PROPERTIES
 # Unit tests
 if(BUILD_TESTS)
     enable_testing()
-    
-    # Fetch Catch2 (latest v3.7.1)
-    include(FetchContent)
-    FetchContent_Declare(
-        Catch2
-        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG v3.7.1
-    )
-    FetchContent_MakeAvailable(Catch2)
-    
-    # Test executable (no strict warnings - Catch2 compatibility)
     add_executable(unit_tests
         src/test_main.cpp
         src/arch/Pipeline.cpp
@@ -79,17 +68,39 @@ if(BUILD_TESTS)
         src/sim/Simulator.cpp
         src/workload/MatMulWorkload.cpp
         src/workload/Conv1DWorkload.cpp
+        src/workload/BranchWorkload.cpp
     )
-    target_link_libraries(unit_tests PRIVATE Catch2::Catch2WithMain)
     target_compile_features(unit_tests PRIVATE cxx_std_17)
+    target_link_libraries(unit_tests PRIVATE project_warnings)
     
     add_test(NAME unit_tests COMMAND unit_tests)
     
-    # Integration tests (run simulator with new CLI flags)
     add_test(NAME integration_matmul_32kb
-        COMMAND cpu-sim --cache-size 32768 --json
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    )
+        COMMAND cpu-sim --workload matmul --matmul-n 2 --cache-size 32768 --json)
+    set_tests_properties(integration_matmul_32kb PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"instructions_retired\": 32")
+    add_test(NAME integration_branch
+        COMMAND cpu-sim --workload branch --branch-count 3 --bp-accuracy 0 --json)
+    set_tests_properties(integration_branch PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"instructions_retired\": 6")
+    add_test(NAME integration_config
+        COMMAND cpu-sim --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/conv1d_config.json)
+    set_tests_properties(integration_config PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"instructions_retired\": 24")
+    add_test(NAME reject_invalid_config
+        COMMAND cpu-sim --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/invalid_config.json)
+    set_tests_properties(reject_invalid_config PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME reject_width_nine COMMAND cpu-sim --issue-width 9)
+    set_tests_properties(reject_width_nine PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME reject_nan_accuracy COMMAND cpu-sim --bp-accuracy nan)
+    set_tests_properties(reject_nan_accuracy PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME reject_conv_kernel COMMAND cpu-sim --workload conv1d --conv1d-len 3 --conv1d-kernel 4)
+    set_tests_properties(reject_conv_kernel PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME reject_zero_progress COMMAND cpu-sim --progress --progress-interval 0)
+    set_tests_properties(reject_zero_progress PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME reject_overflowing_cache_geometry
+        COMMAND cpu-sim --cache-size 128 --cache-line-size 2147483648 --cache-assoc 2)
+    set_tests_properties(reject_overflowing_cache_geometry PROPERTIES WILL_FAIL TRUE)
 endif()
 
 # Installation
