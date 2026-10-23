@@ -1,0 +1,4 @@
+{
+  "workload": "conv1d",
+  "conv1d_input_len": "four"
+}

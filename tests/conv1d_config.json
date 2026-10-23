@@ -1,0 +1,8 @@
+{
+  "workload": "conv1d",
+  "conv1d_input_len": 4,
+  "conv1d_kernel_size": 2,
+  "pipeline_issue_width": 2,
+  "l1_cache_size": 1024,
+  "json_output": true
+}
