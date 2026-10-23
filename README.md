@@ -39,7 +39,7 @@ The simulator models a simplified CPU with the following assumptions:
 * **In-order execution** with 5-stage pipeline (Fetch, Decode, Execute, Memory, Writeback)
 * **Configurable issue width** (1-8 instructions per cycle)
 * **Blocking L1 cache** with set-associative organization and LRU replacement; only one access can be outstanding, and its port stays occupied through the completion cycle
-* **Branch misprediction cost** added as recovery cycles to a fixed instruction stream
+* **Branch misprediction cost** added as an abstract cycle penalty to a fixed instruction stream
 * **Store-to-load address dependency** stalls
 * **Structural hazard** on single memory port
 
@@ -52,6 +52,11 @@ cycle `t + L`. Younger instructions cannot retire ahead of an older stalled
 load. Independent younger work may reach the Memory stage, but it cannot pass
 the stalled load.
 
+The `raw_hazard_stalls` and `structural_hazard_stalls` counters count blocked
+**instruction-cycle events**, not elapsed cycles. Each blocked instruction can
+add one event in a cycle, so several blocked instructions can add several events
+in the same cycle. These counters are not additive components of `total_cycles`.
+
 ---
 
 ## ⚡ Key Features
@@ -61,8 +66,8 @@ the stalled load.
 * Models a **5-stage in-order pipeline** (Fetch → Decode → Execute → Memory → Writeback)
 * Captures pipeline stalls caused by:
   * **Structural hazards** (busy pipeline stages, single memory port)
-  * **Control hazards** (branch mispredictions with configurable penalty)
   * **Data hazards** (RAW dependencies on memory addresses)
+* Adds a configurable branch-misprediction penalty to the reported cycle total
 * **Fixed five-stage pipeline** and configurable issue width (1-8)
 * Multiple instructions can advance per cycle where stage and port capacity permits
 
@@ -86,10 +91,13 @@ the stalled load.
 * Models prediction accuracy (e.g., 95%) using a fixed-seed RNG for deterministic replay
 * Measures:
   * Misprediction frequency
-  * Recovery-cycle penalties
-* Branch prediction occurs at **Fetch stage**. The synthetic workloads have no alternate branch path, so mispredictions preserve the generated instruction stream.
+  * Added penalty cycles
+* Branch prediction occurs when a branch enters **Fetch**. The penalty changes
+  the reported cycle total, but does not stall or flush the pipeline, discard
+  younger instructions, or redirect execution. Synthetic workloads have no
+  alternate branch path, so mispredictions preserve the generated stream.
 * **Note:** The bundled MatMul and Conv1D workloads do not emit branch instructions;
-  use `--workload branch` to exercise prediction and recovery-cycle behavior.
+  use `--workload branch` to exercise prediction and penalty accounting.
 
 ### 4. AI-Representative Workloads
 
@@ -224,6 +232,14 @@ A self-contained test runner validates architectural invariants:
 * Two independent misses cannot overlap, including the first miss's completion cycle
 * Hit and miss latency boundaries, sustained issue-width throughput, repeated runs, and branch penalties are checked
 * Invalid configuration values fail in Release builds
+
+`Simulator::run()` requires an empty pipeline, returns fresh statistics for
+each invocation, and drains the pipeline before returning. A reused cache
+stays warm, and a reused branch predictor continues from its current random
+state. Reset a workload explicitly to replay it. `Pipeline::flush()` manually
+discards in-flight instructions and clears an outstanding memory access. It
+does not reset lifetime stall-event counters or the cache and predictor. Branch
+mispredictions never call `flush()`.
 
 Run with: `cmake -B build -DBUILD_TESTS=ON && cmake --build build --config Release && ctest --test-dir build --output-on-failure -C Release`
 

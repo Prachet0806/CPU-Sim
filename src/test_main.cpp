@@ -54,6 +54,17 @@ class CountingCache : public arch::CacheInterface
     uint32_t latency_;
 };
 
+class FixedPenaltyPredictor : public arch::BranchPredictorInterface
+{
+  public:
+    uint32_t predict(uint64_t) override
+    {
+        ++predictions;
+        return 7;
+    }
+    uint32_t predictions = 0;
+};
+
 class SequenceWorkload : public workload::Workload
 {
   public:
@@ -243,6 +254,38 @@ void test_stall_statistics()
     CHECK(stats.structural_hazard_stalls == pipeline.structural_hazard_stalls());
 }
 
+void test_stall_event_units_and_manual_flush()
+{
+    arch::Pipeline pipeline({5, 4});
+    CountingCache cache(10);
+    pipeline.set_cache_interface(&cache);
+    CHECK(pipeline.push_instructions({{arch::InstrType::LOAD, 0, 0x1000},
+                                      {arch::InstrType::ALU, 0, 0},
+                                      {arch::InstrType::ALU, 0, 0},
+                                      {arch::InstrType::ALU, 0, 0}},
+                                     {0, 4, 8, 12}) == 4);
+    for (uint32_t cycle = 0; cycle < 5; ++cycle)
+    {
+        cache.new_cycle(cycle);
+        CHECK(pipeline.cycle() == 0);
+    }
+    CHECK(cache.accesses == 1);
+    CHECK(pipeline.structural_hazard_stalls() == 6);
+    CHECK(pipeline.structural_hazard_stalls() > 5); // Several blocked instructions in one cycle.
+    pipeline.flush();
+    CHECK(pipeline.empty());
+    CHECK(pipeline.structural_hazard_stalls() == 6); // Flush preserves lifetime counters.
+    CHECK(pipeline.push_instructions({{arch::InstrType::ALU, 0, 0}}, {16}) == 1);
+    uint32_t retired = 0;
+    for (uint32_t cycle = 0; cycle < 20 && !pipeline.empty(); ++cycle)
+    {
+        retired += pipeline.cycle();
+    }
+    CHECK(pipeline.empty());
+    CHECK(retired == 1);
+    CHECK(pipeline.structural_hazard_stalls() == 6);
+}
+
 sim::SimStats run_workload(workload::Workload& workload, uint32_t width, bool mispredict = false, uint32_t penalty = 7,
                            uint64_t limit = UINT64_MAX)
 {
@@ -300,6 +343,33 @@ void test_branch_penalty_and_zero_penalty_stats()
     CHECK(zero_stats.instructions == 6);
 }
 
+void test_branch_penalty_preserves_pipeline()
+{
+    arch::Pipeline pipeline({5, 2});
+    FixedPenaltyPredictor predictor;
+    pipeline.set_branch_predictor_interface(&predictor);
+    CHECK(pipeline.push_instructions({{arch::InstrType::BRANCH, 0, 0}, {arch::InstrType::ALU, 0, 0}}, {0, 4}) == 2);
+    CHECK(predictor.predictions == 1);
+    CHECK(pipeline.cycle() == 0);
+    CHECK(pipeline.branch_penalty_cycles() == 7);
+    CHECK(!pipeline.empty());
+    uint32_t retired = 0;
+    for (uint32_t cycle = 0; cycle < 20 && !pipeline.empty(); ++cycle)
+    {
+        retired += pipeline.cycle();
+        CHECK(pipeline.branch_penalty_cycles() == 0);
+    }
+    CHECK(pipeline.empty());
+    CHECK(retired == 2);
+    CHECK(pipeline.push_instructions({{arch::InstrType::BRANCH, 0, 0}}, {8}) == 1);
+    CHECK(predictor.predictions == 2);
+    CHECK(pipeline.cycle() == 0);
+    CHECK(pipeline.branch_penalty_cycles() == 7);
+    pipeline.flush();
+    CHECK(pipeline.empty());
+    CHECK(pipeline.branch_penalty_cycles() == 0);
+}
+
 void test_superscalar_throughput()
 {
     const std::vector<arch::Instruction> alus(32, {arch::InstrType::ALU, 0, 0});
@@ -354,6 +424,24 @@ void test_repeated_simulator_runs()
     CHECK(second.branch_predictions == 1);
     CHECK(second.branch_mispredicts == 1);
     CHECK(second.cycles < first.cycles);
+    CHECK(first.raw_hazard_stalls + second.raw_hazard_stalls == pipeline.raw_hazard_stalls());
+    CHECK(first.structural_hazard_stalls + second.structural_hazard_stalls == pipeline.structural_hazard_stalls());
+
+    CHECK(pipeline.push_instructions({{arch::InstrType::ALU, 0, 0}}, {8}) == 1);
+    SequenceWorkload empty({});
+    bool rejected = false;
+    try
+    {
+        (void)simulator.run(empty);
+    }
+    catch (const std::logic_error&)
+    {
+        rejected = true;
+    }
+    CHECK(rejected);
+    CHECK(!pipeline.empty());
+    pipeline.flush();
+    CHECK(simulator.run(empty).instructions == 0);
 }
 
 void test_bounds()
@@ -398,8 +486,10 @@ int main()
     test_cache_hit_miss_timing_and_flush();
     test_order_and_raw_hazard();
     test_stall_statistics();
+    test_stall_event_units_and_manual_flush();
     test_instruction_conservation();
     test_branch_penalty_and_zero_penalty_stats();
+    test_branch_penalty_preserves_pipeline();
     test_superscalar_throughput();
     test_repeated_simulator_runs();
     test_bounds();

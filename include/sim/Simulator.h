@@ -20,8 +20,8 @@ struct SimStats
     uint64_t branch_mispredicts = 0;       ///< Branch mispredictions
     uint64_t cache_hits = 0;               ///< Cache hits
     uint64_t cache_accesses = 0;           ///< Total cache accesses
-    uint64_t raw_hazard_stalls = 0;        ///< RAW hazard stall cycles
-    uint64_t structural_hazard_stalls = 0; ///< Structural hazard stall cycles
+    uint64_t raw_hazard_stalls = 0;        ///< RAW instruction-cycle stall events in this run
+    uint64_t structural_hazard_stalls = 0; ///< Structural instruction-cycle stall events in this run
     uint64_t branch_predictions = 0;       ///< Total branch predictions
 };
 
@@ -44,17 +44,17 @@ class Simulator
     Simulator(arch::Pipeline& p, arch::Cache& c, arch::BranchPredictor& bp);
 
     /**
-     * @brief Run simulation to completion.
+     * @brief Run simulation to completion from an empty pipeline.
      * @param workload Workload providing instruction stream
-     * @return Simulation statistics
+     * @return Per-run simulation statistics; cache and predictor state persist
      */
     SimStats run(workload::Workload& workload);
 
     /**
-     * @brief Run simulation with instruction limit.
+     * @brief Run simulation with instruction limit from an empty pipeline.
      * @param workload Workload providing instruction stream
      * @param max_instructions Maximum instructions to simulate
-     * @return Simulation statistics
+     * @return Per-run simulation statistics; cache and predictor state persist
      */
     SimStats run(workload::Workload& workload, uint64_t max_instructions);
 

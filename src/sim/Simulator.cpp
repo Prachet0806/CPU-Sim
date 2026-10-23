@@ -84,6 +84,10 @@ SimStats Simulator::run(workload::Workload& workload) { return run(workload, UIN
 
 SimStats Simulator::run(workload::Workload& workload, uint64_t max_instructions)
 {
+    if (!pipeline_.empty())
+    {
+        throw std::logic_error("Simulator run requires an empty pipeline");
+    }
     SimStats stats{};
     const uint64_t initial_raw_stalls = pipeline_.raw_hazard_stalls();
     const uint64_t initial_structural_stalls = pipeline_.structural_hazard_stalls();
@@ -140,8 +144,8 @@ SimStats Simulator::run(workload::Workload& workload, uint64_t max_instructions)
         // Cycle the pipeline
         uint32_t retired = pipeline_.cycle();
         stats.cycles++;
-        // Add branch misprediction flush penalty cycles (not counted as instructions)
-        stats.cycles += pipeline_.flush_penalty_cycles();
+        // Branch penalties affect the reported total, not in-flight instruction state.
+        stats.cycles += pipeline_.branch_penalty_cycles();
         stats.instructions += retired;
         if (progress_callback_ && stats.instructions >= next_progress_)
         {

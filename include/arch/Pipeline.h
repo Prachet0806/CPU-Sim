@@ -36,13 +36,14 @@ enum class PipelineStage : uint32_t
  */
 struct PipelineInstruction
 {
-    Instruction instr;               ///< The instruction being executed
-    uint64_t pc = 0;                 ///< Program counter for branch prediction
-    uint64_t sequence = 0;           ///< Admission order for in-order progress
-    bool valid = false;              ///< Whether this slot holds a valid instruction
-    uint64_t cycles_in_stage = 0;    ///< Cycles spent in current stage, including the current cycle
-    bool memory_access_done = false; ///< For MEM stage tracking
-    uint32_t memory_latency = 0;     ///< Latency from cache access or mispredict penalty
+    Instruction instr;                  ///< The instruction being executed
+    uint64_t pc = 0;                    ///< Program counter for branch prediction
+    uint64_t sequence = 0;              ///< Admission order for in-order progress
+    bool valid = false;                 ///< Whether this slot holds a valid instruction
+    uint64_t cycles_in_stage = 0;       ///< Cycles spent in current stage, including the current cycle
+    bool memory_access_done = false;    ///< For MEM stage tracking
+    uint32_t memory_latency = 0;        ///< Latency from cache access
+    uint32_t branch_penalty_cycles = 0; ///< Abstract cycle penalty for a mispredicted branch
     bool branch_penalty_applied = false;
 };
 
@@ -121,7 +122,10 @@ class Pipeline
     uint32_t cycle();
 
     /**
-     * @brief Flush pipeline (e.g., on branch misprediction).
+     * @brief Manually discard all in-flight instructions.
+     *
+     * Branch mispredictions do not call this method. Lifetime stall-event
+     * counters, cache state, and predictor state are not reset.
      */
     void flush();
 
@@ -138,20 +142,23 @@ class Pipeline
     bool empty() const;
 
     /**
-     * @brief Get flush penalty cycles from the last branch misprediction.
-     * @return Penalty cycles to add to total cycle count (0 if no flush)
+     * @brief Get abstract branch penalty cycles assigned during the last cycle.
+     * @return Penalty cycles to add to the reported total (0 if none)
      */
-    uint64_t flush_penalty_cycles() const { return flush_penalty_cycles_; }
+    uint64_t branch_penalty_cycles() const { return branch_penalty_cycles_; }
+
+    /** @brief Legacy name for branch_penalty_cycles(); no pipeline flush occurs. */
+    uint64_t flush_penalty_cycles() const { return branch_penalty_cycles(); }
 
     /**
-     * @brief Get RAW hazard stall cycles accumulated.
-     * @return Number of cycles stalled due to RAW data hazards
+     * @brief Get accumulated RAW hazard instruction-cycle stall events.
+     * @return One event per blocked instruction per cycle, not elapsed cycles
      */
     uint64_t raw_hazard_stalls() const { return raw_hazard_stalls_; }
 
     /**
-     * @brief Get structural hazard stall cycles accumulated.
-     * @return Number of cycles stalled due to structural hazards
+     * @brief Get accumulated structural hazard instruction-cycle stall events.
+     * @return One event per blocked instruction per cycle, not elapsed cycles
      */
     uint64_t structural_hazard_stalls() const { return structural_hazard_stalls_; }
 
@@ -176,9 +183,9 @@ class Pipeline
     CacheInterface* cache_ = nullptr;
     BranchPredictorInterface* branch_predictor_ = nullptr;
 
-    uint64_t flush_penalty_cycles_ = 0;     ///< Branch recovery cycles from the last cycle
-    uint64_t raw_hazard_stalls_ = 0;        ///< Accumulated RAW hazard stall cycles
-    uint64_t structural_hazard_stalls_ = 0; ///< Accumulated structural hazard stall cycles
+    uint64_t branch_penalty_cycles_ = 0;    ///< Abstract branch penalty assigned in the last cycle
+    uint64_t raw_hazard_stalls_ = 0;        ///< Accumulated RAW instruction-cycle stall events
+    uint64_t structural_hazard_stalls_ = 0; ///< Accumulated structural instruction-cycle stall events
     uint64_t next_sequence_ = 0;
     uint64_t next_retire_sequence_ = 0;
     std::optional<uint64_t> active_memory_sequence_; ///< The sole outstanding blocking-cache access

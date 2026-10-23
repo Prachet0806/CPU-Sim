@@ -52,7 +52,7 @@ size_t Pipeline::push_instructions(const std::vector<Instruction>& instrs, const
         entry.valid = true;
         if (entry.instr.type == InstrType::BRANCH && branch_predictor_)
         {
-            entry.memory_latency = branch_predictor_->predict(entry.pc);
+            entry.branch_penalty_cycles = branch_predictor_->predict(entry.pc);
         }
         fetch[slot] = entry;
         ++accepted;
@@ -95,7 +95,7 @@ bool Pipeline::has_older_store(uint64_t sequence, uint64_t address) const
 
 uint32_t Pipeline::cycle()
 {
-    flush_penalty_cycles_ = 0;
+    branch_penalty_cycles_ = 0;
     uint32_t retired = 0;
 
     // A younger instruction may reach writeback, but cannot retire first.
@@ -156,7 +156,7 @@ uint32_t Pipeline::cycle()
             case PipelineStage::FETCH:
                 if (entry.instr.type == InstrType::BRANCH && !entry.branch_penalty_applied)
                 {
-                    flush_penalty_cycles_ += entry.memory_latency;
+                    branch_penalty_cycles_ += entry.branch_penalty_cycles;
                     entry.branch_penalty_applied = true;
                 }
                 advance_instruction(stage, slot);
@@ -262,7 +262,7 @@ void Pipeline::flush()
         }
     }
     next_retire_sequence_ = next_sequence_;
-    flush_penalty_cycles_ = 0;
+    branch_penalty_cycles_ = 0;
     active_memory_sequence_.reset();
 }
 

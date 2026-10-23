@@ -11,8 +11,8 @@ namespace workload
  * @brief Branch-heavy workload for exercising branch prediction.
  *
  * Generates a stream of alternating ALU and BRANCH instructions so that the
- * branch predictor, pipeline flush on misprediction, and branch statistics
- * can be exercised and measured.
+ * branch predictor, abstract misprediction penalty, and branch statistics
+ * can be exercised and measured. The instruction stream does not redirect.
  *
  * Memory layout:
  * - Instructions are purely synthetic; BRANCH instructions carry a dummy
