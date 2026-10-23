@@ -45,6 +45,8 @@ class BranchPredictor : public BranchPredictorInterface
      */
     uint32_t predict(uint64_t pc);
     bool last_mispredicted() const { return last_mispredicted_; }
+    uint64_t total_predictions() const { return total_predictions_; }
+    uint64_t mispredictions() const { return mispredictions_; }
 
     /**
      * @brief Force every prediction to mispredict (test hook).
