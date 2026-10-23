@@ -114,7 +114,8 @@ uint32_t Pipeline::cycle()
         ++retired;
     }
 
-    bool memory_started_this_cycle = false;
+    // A blocking transaction occupies the port through its completion cycle.
+    bool memory_port_busy_this_cycle = active_memory_sequence_.has_value();
     for (int stage_index = static_cast<int>(PipelineStage::MEMORY); stage_index >= 0; --stage_index)
     {
         const size_t stage = static_cast<size_t>(stage_index);
@@ -174,7 +175,7 @@ uint32_t Pipeline::cycle()
                 {
                     if (!entry.memory_access_done)
                     {
-                        if (memory_started_this_cycle)
+                        if (memory_port_busy_this_cycle)
                         {
                             ++structural_hazard_stalls_;
                             break;
@@ -184,13 +185,19 @@ uint32_t Pipeline::cycle()
                             throw std::logic_error("Memory instruction requires a cache");
                         }
                         entry.memory_latency = cache_->access(entry.instr.memory_address);
+                        if (entry.memory_latency == 0)
+                        {
+                            throw std::logic_error("Cache access latency must be positive");
+                        }
                         entry.memory_access_done = true;
-                        entry.cycles_in_stage = 0;
-                        memory_started_this_cycle = true;
+                        entry.cycles_in_stage = 1;
+                        active_memory_sequence_ = entry.sequence;
+                        memory_port_busy_this_cycle = true;
                     }
-                    else if (entry.cycles_in_stage >= entry.memory_latency)
+                    if (entry.memory_access_done && entry.cycles_in_stage >= entry.memory_latency &&
+                        advance_instruction(stage, slot))
                     {
-                        advance_instruction(stage, slot);
+                        active_memory_sequence_.reset();
                     }
                 }
                 else
@@ -256,6 +263,7 @@ void Pipeline::flush()
     }
     next_retire_sequence_ = next_sequence_;
     flush_penalty_cycles_ = 0;
+    active_memory_sequence_.reset();
 }
 
 bool Pipeline::empty() const

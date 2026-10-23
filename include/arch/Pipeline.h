@@ -4,6 +4,7 @@
 #include <vector>
 #include <array>
 #include <cstddef>
+#include <optional>
 #include "Instruction.h"
 
 namespace arch
@@ -39,7 +40,7 @@ struct PipelineInstruction
     uint64_t pc = 0;                 ///< Program counter for branch prediction
     uint64_t sequence = 0;           ///< Admission order for in-order progress
     bool valid = false;              ///< Whether this slot holds a valid instruction
-    uint64_t cycles_in_stage = 0;    ///< Cycles spent in current stage
+    uint64_t cycles_in_stage = 0;    ///< Cycles spent in current stage, including the current cycle
     bool memory_access_done = false; ///< For MEM stage tracking
     uint32_t memory_latency = 0;     ///< Latency from cache access or mispredict penalty
     bool branch_penalty_applied = false;
@@ -55,7 +56,7 @@ class CacheInterface
     /**
      * @brief Access cache at given address.
      * @param address Memory address to access
-     * @return Latency in cycles (hit_latency or miss_latency)
+     * @return Positive latency in cycles, including the access-start cycle
      */
     virtual uint32_t access(uint64_t address) = 0;
     virtual uint32_t hit_latency() const = 0;
@@ -180,6 +181,7 @@ class Pipeline
     uint64_t structural_hazard_stalls_ = 0; ///< Accumulated structural hazard stall cycles
     uint64_t next_sequence_ = 0;
     uint64_t next_retire_sequence_ = 0;
+    std::optional<uint64_t> active_memory_sequence_; ///< The sole outstanding blocking-cache access
 
     bool advance_instruction(size_t stage_idx, size_t issue_slot);
     bool has_older_at_or_before(size_t stage_idx, uint64_t sequence) const;

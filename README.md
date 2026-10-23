@@ -38,12 +38,19 @@ The simulator models a simplified CPU with the following assumptions:
 
 * **In-order execution** with 5-stage pipeline (Fetch, Decode, Execute, Memory, Writeback)
 * **Configurable issue width** (1-8 instructions per cycle)
-* **Blocking L1 cache** with set-associative organization and LRU replacement
+* **Blocking L1 cache** with set-associative organization and LRU replacement; only one access can be outstanding, and its port stays occupied through the completion cycle
 * **Branch misprediction cost** added as recovery cycles to a fixed instruction stream
 * **Store-to-load address dependency** stalls
 * **Structural hazard** on single memory port
 
 The simulator is designed to study **performance trends and sensitivities**, not to produce cycle-accurate results.
+
+Each pipeline stage takes at least one cycle. A cache access started in cycle `t`
+with configured latency `L` completes at the end of cycle `t + L - 1` and can
+retire from Writeback in the next cycle. The next memory access can start in
+cycle `t + L`. Younger instructions cannot retire ahead of an older stalled
+load. Independent younger work may reach the Memory stage, but it cannot pass
+the stalled load.
 
 ---
 
@@ -214,6 +221,8 @@ A self-contained test runner validates architectural invariants:
 * Branch misprediction penalties preserve instruction counts
 * Accepted instructions retire in order, even with a memory miss
 * Store-to-load hazards and the single memory port are enforced
+* Two independent misses cannot overlap, including the first miss's completion cycle
+* Hit and miss latency boundaries, sustained issue-width throughput, repeated runs, and branch penalties are checked
 * Invalid configuration values fail in Release builds
 
 Run with: `cmake -B build -DBUILD_TESTS=ON && cmake --build build --config Release && ctest --test-dir build --output-on-failure -C Release`
